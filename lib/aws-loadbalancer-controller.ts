@@ -14,9 +14,11 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
-import * as cdk from '@aws-cdk/core';
-import * as eks from '@aws-cdk/aws-eks';
-import * as iam from '@aws-cdk/aws-iam';
+
+import { Stack } from 'aws-cdk-lib';
+import * as eks from 'aws-cdk-lib/aws-eks';
+import * as iam from 'aws-cdk-lib/aws-iam';
+import { Construct } from 'constructs';
 
 export interface AwsLoadBalancerControllerProps {
     eksCluster: eks.ICluster;
@@ -26,9 +28,9 @@ interface HelmValues {
     [key: string]: unknown;
 }
 
-export class AwsLoadBalancerController extends cdk.Construct {
+export class AwsLoadBalancerController extends Construct {
     constructor(
-        scope: cdk.Construct,
+        scope: Construct,
         id: string,
         props: AwsLoadBalancerControllerProps
     ) {
@@ -183,19 +185,19 @@ export class AwsLoadBalancerController extends cdk.Construct {
             resources: ['*'],
         });
 
-        awsLbControllerServiceAccount.addToPolicy(lbAcmPolicyStatements);
-        awsLbControllerServiceAccount.addToPolicy(lbEc2PolicyStatements);
-        awsLbControllerServiceAccount.addToPolicy(lbElbPolicyStatements);
-        awsLbControllerServiceAccount.addToPolicy(lbIamPolicyStatements);
-        awsLbControllerServiceAccount.addToPolicy(lbCognitoPolicyStatements);
-        awsLbControllerServiceAccount.addToPolicy(lbWafRegPolicyStatements);
-        awsLbControllerServiceAccount.addToPolicy(lbTagPolicyStatements);
-        awsLbControllerServiceAccount.addToPolicy(lbWafPolicyStatements);
-        awsLbControllerServiceAccount.addToPolicy(lbWafv2PolicyStatements);
-        awsLbControllerServiceAccount.addToPolicy(lbShieldPolicyStatements);
+        awsLbControllerServiceAccount.addToPrincipalPolicy(lbAcmPolicyStatements);
+        awsLbControllerServiceAccount.addToPrincipalPolicy(lbEc2PolicyStatements);
+        awsLbControllerServiceAccount.addToPrincipalPolicy(lbElbPolicyStatements);
+        awsLbControllerServiceAccount.addToPrincipalPolicy(lbIamPolicyStatements);
+        awsLbControllerServiceAccount.addToPrincipalPolicy(lbCognitoPolicyStatements);
+        awsLbControllerServiceAccount.addToPrincipalPolicy(lbWafRegPolicyStatements);
+        awsLbControllerServiceAccount.addToPrincipalPolicy(lbTagPolicyStatements);
+        awsLbControllerServiceAccount.addToPrincipalPolicy(lbWafPolicyStatements);
+        awsLbControllerServiceAccount.addToPrincipalPolicy(lbWafv2PolicyStatements);
+        awsLbControllerServiceAccount.addToPrincipalPolicy(lbShieldPolicyStatements);
 
         // Deploy AWS LoadBalancer Controller from the Helm chart
-        const stack = cdk.Stack.of(this);
+        const stack = Stack.of(this);
         const lbHelmValues = {} as HelmValues;
         lbHelmValues.clusterName = props.eksCluster.clusterName;
         lbHelmValues.region = stack.region;
