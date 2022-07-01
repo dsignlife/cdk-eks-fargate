@@ -24,6 +24,7 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import { AwsLoadBalancerController } from "./aws-loadbalancer-controller";
 import { NginxService } from "./nginx-service";
 import { EksFargateLogging } from "./eks-fargate-logging";
+import { Stack } from "aws-cdk-lib";
 
 export interface CdkEksFargateStackProps extends cdk.StackProps {
   vpcId?: string;
@@ -39,26 +40,60 @@ export class CdkEksFargateStack extends cdk.Stack {
       assumedBy: new iam.AccountRootPrincipal(),
     });
 
-    // Create a EKS cluster with Fargate profile.
-    const cluster = new eks.FargateCluster(this, "my-cluster", {
-      version: eks.KubernetesVersion.V1_21,
-      mastersRole: masterRole,
-      clusterName: props.clusterName,
-      outputClusterName: true,
-
-      // Networking related settings listed below - important in enterprise context.
-      endpointAccess: eks.EndpointAccess.PUBLIC, // In Enterprise context, you may want to set it to PRIVATE.
-      // kubectlEnvironment: {     // Also if the Enterprise private subnets do not provide implicit internet proxy instead the workloads need to specify https_proxy, then you need to use kubectlEnvironment to set up http_proxy/https_proxy/no_proxy accordingly for the Lambda provissioning EKS cluster behind the scene so that the Lambda can access AWS service APIs via enterprise internet proxy.
-      //     https_proxy: "your-enterprise-proxy-server",
-      //     http_proxy: "your-enterprise-proxy-server",
-      //     no_proxy: "localhost,127.0.0.1,169.254.169.254,.eks.amazonaws.com,websites-should-not-be-accesses-via-proxy-in-your-environment"
-      // },
-      vpc:
-        props.vpcId == undefined
-          ? undefined
-          : ec2.Vpc.fromLookup(this, "vpc", { vpcId: props?.vpcId }),
-      vpcSubnets: [{ subnetType: ec2.SubnetType.PRIVATE_WITH_NAT }], // you can also specify the subnets by other attributes
+    const eksDashboardPolicyStatements = new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
+        "eks:ListFargateProfiles",
+        "eks:DescribeNodegroup",
+        "eks:ListNodegroups",
+        "eks:ListUpdates",
+        "eks:AccessKubernetesApi",
+        "eks:ListAddons",
+        "eks:DescribeCluster",
+        "eks:DescribeAddonVersions",
+        "eks:ListClusters",
+        "eks:ListIdentityProviderConfigs",
+        "iam:ListRoles"
+      ],
+      resources: ["*"],
     });
+
+    const eksDashboardSSMPolicyStatements = new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
+        "ssm:GetParameter"
+      ],
+      resources: [`arn:aws:ssm:*:${Stack.of(this).account}:parameter/*`],
+    });
+
+    masterRole.addToPolicy(eksDashboardPolicyStatements);
+    masterRole.addToPolicy(eksDashboardSSMPolicyStatements);
+ 
+
+    // Create a EKS cluster with Fargate profile.
+    const cluster = new eks.FargateCluster(
+      this,
+      `${props.clusterName}-cluster`,
+      {
+        version: eks.KubernetesVersion.V1_21,
+        mastersRole: masterRole,
+        clusterName: props.clusterName,
+        outputClusterName: true,
+
+        // Networking related settings listed below - important in enterprise context.
+        endpointAccess: eks.EndpointAccess.PUBLIC, // In Enterprise context, you may want to set it to PRIVATE.
+        // kubectlEnvironment: {     // Also if the Enterprise private subnets do not provide implicit internet proxy instead the workloads need to specify https_proxy, then you need to use kubectlEnvironment to set up http_proxy/https_proxy/no_proxy accordingly for the Lambda provissioning EKS cluster behind the scene so that the Lambda can access AWS service APIs via enterprise internet proxy.
+        //     https_proxy: "your-enterprise-proxy-server",
+        //     http_proxy: "your-enterprise-proxy-server",
+        //     no_proxy: "localhost,127.0.0.1,169.254.169.254,.eks.amazonaws.com,websites-should-not-be-accesses-via-proxy-in-your-environment"
+        // },
+        vpc:
+          props.vpcId == undefined
+            ? undefined
+            : ec2.Vpc.fromLookup(this, "vpc", { vpcId: props?.vpcId }),
+        vpcSubnets: [{ subnetType: ec2.SubnetType.PRIVATE_WITH_NAT }], // you can also specify the subnets by other attributes
+      }
+    );
 
     // Deploy AWS LoadBalancer Controller onto EKS.
     new AwsLoadBalancerController(this, "aws-loadbalancer-controller", {
@@ -118,7 +153,7 @@ export class CdkEksFargateStack extends cdk.Stack {
       "customer-app-profile",
       {
         selectors: [{ namespace: k8sAppNameSpace }],
-        subnetSelection: { subnetType: ec2.SubnetType.PRIVATE },
+        subnetSelection: { subnetType: ec2.SubnetType.PRIVATE_WITH_NAT },
         vpc: cluster.vpc,
       }
     );
